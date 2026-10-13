@@ -459,4 +459,10 @@ def get_statistics() -> dict:
 
 
 if __name__ == "__main__":
-    mcp.run()
+    transport = os.getenv("MCP_TRANSPORT", "stdio").lower()
+    if transport == "sse":
+        port = int(os.getenv("PORT", os.getenv("MCP_PORT", "8000")))
+        host = os.getenv("HOST", os.getenv("MCP_HOST", "0.0.0.0"))
+        mcp.run(transport="sse", host=host, port=port)
+    else:
+        mcp.run(transport="stdio")

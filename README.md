@@ -84,6 +84,45 @@ HOMEBOX_API_KEY=hb_VASHOMEBOXAPIKEY
 }
 ```
 
+### 4. Spustenie cez Docker (GHCR Image)
+
+MCP server je automaticky zostavovaný a publikovaný na **GitHub Container Registry (GHCR)** pre architektúry `linux/amd64` aj `linux/arm64`.
+
+#### A. Beh cez Docker v MCP klientoch (`stdio` režim)
+Nie je nutné inštalovať Python ani závislosti. MCP klient (Claude Desktop, Antigravity) spustí kontajner priamo:
+
+```json
+{
+  "mcpServers": {
+    "homebox": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e", "HOMEBOX_URL=https://hb.vasedomena.sk",
+        "-e", "HOMEBOX_API_KEY=hb_VASHOMEBOXAPIKEY",
+        "ghcr.io/lmolent/homebox-mcp:latest"
+      ]
+    }
+  }
+}
+```
+
+#### B. Beh ako sieťová služba (SSE transport)
+Ak potrebujete MCP server ako sieťovú službu (Server-Sent Events) pre webových alebo vzdialených agentov:
+
+```bash
+docker run -d \
+  --name homebox-mcp \
+  -p 8000:8000 \
+  -e MCP_TRANSPORT=sse \
+  -e PORT=8000 \
+  -e HOMEBOX_URL=https://hb.vasedomena.sk \
+  -e HOMEBOX_API_KEY=hb_VASHOMEBOXAPIKEY \
+  ghcr.io/lmolent/homebox-mcp:latest
+```
+
 ---
 
 ## 🛠 Prehľad nástrojov (Tools Reference)
