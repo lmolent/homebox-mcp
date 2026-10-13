@@ -3,54 +3,64 @@
 [![FastMCP](https://img.shields.io/badge/FastMCP-Python-blue)](https://github.com/jlowin/fastmcp)
 [![Homebox](https://img.shields.io/badge/Homebox-Inventory-green)](https://homebox.software/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Docker](https://img.shields.io/badge/Docker-GHCR-2496ED?logo=docker&logoColor=white)](https://github.com/lmolent/homebox-mcp/pkgs/container/homebox-mcp)
 
-Produkčný **Model Context Protocol (MCP)** server pre samoobslužný inventárny systém [Homebox](https://homebox.software/). Umožňuje autonómnym **AI agentom** (Antigravity, Claude Desktop, Cursor, Claude Code, Cline a ďalším) plnohodnotne pracovať s fyzickým inventárom — vyhľadávať veci, navigovať v hierarchii lokácií, evidovať nové predmety a umiestnenia, zaznamenávať servis/údržbu techniky a spravovať štítky.
-
----
-
-## 📑 Obsah
-- [Architektúra](#-architektúra)
-- [Inštalácia a konfigurácia](#-inštalácia-a-konfigurácia)
-- [Prehľad nástrojov (Tools Reference)](#-prehľad-nástrojov-tools-reference)
-- [Inštrukcie a Best Practices pre AI agentov](#-inštrukcie-a-best-practices-pre-ai-agentov)
-- [Typické scenáre (Agent Workflows)](#-typické-scenáre-agent-workflows)
-- [Testovanie](#-testovanie)
-- [Licencia](#-licencia)
+Production-grade **Model Context Protocol (MCP)** server for the self-hosted [Homebox](https://homebox.software/) inventory management system. Enables autonomous **AI agents** (Google Antigravity, Claude Desktop, Cursor, Claude Code, Cline, and others) to seamlessly interact with physical inventories — finding items, navigating location hierarchies, creating and moving items, logging vehicle/tool maintenance, and managing tags.
 
 ---
 
-## 🏛 Architektúra
+## 📑 Table of Contents
+- [Architecture](#-architecture)
+- [Installation & Configuration](#-installation--configuration)
+  - [1. Prerequisites](#1-prerequisites)
+  - [2. Environment Variables](#2-environment-variables)
+  - [3. Configuration for MCP Clients](#3-configuration-for-mcp-clients)
+  - [4. Docker Deployment (GHCR Image)](#4-docker-deployment-ghcr-image)
+- [Tools Reference](#-tools-reference)
+  - [📍 Locations & Hierarchy](#-locations--hierarchy)
+  - [🔍 Search & Navigation](#-search--navigation)
+  - [📦 Item Management](#-item-management)
+  - [🔧 Maintenance & Service Logs](#-maintenance--service-logs)
+  - [🏷 Tags, Statistics & Attachments](#-tags-statistics--attachments)
+- [Instructions & Best Practices for AI Agents](#-instructions--best-practices-for-ai-agents)
+- [Common Agent Workflows](#-common-agent-workflows)
+- [Testing](#-testing)
+- [License](#-license)
 
-MCP server prepája LLM asistenta s REST API Homeboxu. Je postavený na modernom `FastMCP` a `httpx` s podporou inline definície závislostí podľa PEP 723 pre jednoduché spustenie cez `uv`.
+---
+
+## 🏛 Architecture
+
+The MCP server bridges LLM agents with Homebox's REST API. It is built on modern `FastMCP` and `httpx` with PEP 723 inline script dependency metadata for effortless execution via `uv`.
 
 ```mermaid
 flowchart LR
     Agent["🤖 AI Agent\n(Antigravity / Claude / Cursor)"] 
-    -->|"JSON-RPC (stdio)"| MCP["⚡ Homebox MCP Server\n(homebox_mcp.py)"]
+    -->|"JSON-RPC (stdio or SSE)"| MCP["⚡ Homebox MCP Server\n(homebox_mcp.py)"]
     MCP -->|"REST API / Bearer Token"| HB["📦 Homebox API\n(/api/v1)"]
 ```
 
 ---
 
-## 🚀 Inštalácia a konfigurácia
+## 🚀 Installation & Configuration
 
-### 1. Požiadavky
-- [uv](https://github.com/astral-sh/uv) (odporúčaný Python balíčkovač) alebo Python 3.10+
-- Bežiaca inštancia Homeboxu s povoleným API
-- API kľúč z Homeboxu (*Nastavenia používateľa -> API kľúče*)
+### 1. Prerequisites
+- [uv](https://github.com/astral-sh/uv) (recommended Python package manager) or Python 3.10+
+- A running Homebox instance with API enabled
+- Homebox API key (*User Settings -> API Keys*)
 
-### 2. Lokálne premenné prostredia
-Skopírujte šablónu `.env.example` do `.env`:
+### 2. Environment Variables
+Copy `.env.example` to `.env`:
 ```bash
 cp .env.example .env
 ```
-Nastavte URL vašej Homebox inštancie a vygenerovaný API kľúč:
+Configure your Homebox instance URL and API key:
 ```env
-HOMEBOX_URL=https://hb.vasedomena.sk
-HOMEBOX_API_KEY=hb_VASHOMEBOXAPIKEY
+HOMEBOX_URL=https://homebox.yourdomain.com
+HOMEBOX_API_KEY=hb_your_homebox_api_key_here
 ```
 
-### 3. Konfigurácia pre MCP klientov
+### 3. Configuration for MCP Clients
 
 #### Google Antigravity (`mcp_config.json`)
 ```json
@@ -58,10 +68,10 @@ HOMEBOX_API_KEY=hb_VASHOMEBOXAPIKEY
   "mcpServers": {
     "homebox": {
       "command": "uv",
-      "args": ["run", "/cesta/k/homebox-mcp/homebox_mcp.py"],
+      "args": ["run", "/path/to/homebox-mcp/homebox_mcp.py"],
       "env": {
-        "HOMEBOX_URL": "https://hb.vasedomena.sk",
-        "HOMEBOX_API_KEY": "hb_VASHOMEBOXAPIKEY"
+        "HOMEBOX_URL": "https://homebox.yourdomain.com",
+        "HOMEBOX_API_KEY": "hb_your_homebox_api_key_here"
       }
     }
   }
@@ -74,22 +84,22 @@ HOMEBOX_API_KEY=hb_VASHOMEBOXAPIKEY
   "mcpServers": {
     "homebox": {
       "command": "uv",
-      "args": ["run", "/cesta/k/homebox-mcp/homebox_mcp.py"],
+      "args": ["run", "/path/to/homebox-mcp/homebox_mcp.py"],
       "env": {
-        "HOMEBOX_URL": "https://hb.vasedomena.sk",
-        "HOMEBOX_API_KEY": "hb_VASHOMEBOXAPIKEY"
+        "HOMEBOX_URL": "https://homebox.yourdomain.com",
+        "HOMEBOX_API_KEY": "hb_your_homebox_api_key_here"
       }
     }
   }
 }
 ```
 
-### 4. Spustenie cez Docker (GHCR Image)
+### 4. Docker Deployment (GHCR Image)
 
-MCP server je automaticky zostavovaný a publikovaný na **GitHub Container Registry (GHCR)** pre architektúry `linux/amd64` aj `linux/arm64`.
+Pre-built multi-architecture Docker images (`linux/amd64` and `linux/arm64`) are automatically published to the **GitHub Container Registry (GHCR)**.
 
-#### A. Beh cez Docker v MCP klientoch (`stdio` režim)
-Nie je nutné inštalovať Python ani závislosti. MCP klient (Claude Desktop, Antigravity) spustí kontajner priamo:
+#### A. Running via Docker in MCP Clients (`stdio` mode)
+No local Python or dependencies required. The MCP client runs the container directly:
 
 ```json
 {
@@ -100,8 +110,8 @@ Nie je nutné inštalovať Python ani závislosti. MCP klient (Claude Desktop, A
         "run",
         "-i",
         "--rm",
-        "-e", "HOMEBOX_URL=https://hb.vasedomena.sk",
-        "-e", "HOMEBOX_API_KEY=hb_VASHOMEBOXAPIKEY",
+        "-e", "HOMEBOX_URL=https://homebox.yourdomain.com",
+        "-e", "HOMEBOX_API_KEY=hb_your_homebox_api_key_here",
         "ghcr.io/lmolent/homebox-mcp:latest"
       ]
     }
@@ -109,8 +119,8 @@ Nie je nutné inštalovať Python ani závislosti. MCP klient (Claude Desktop, A
 }
 ```
 
-#### B. Beh ako sieťová služba (SSE transport)
-Ak potrebujete MCP server ako sieťovú službu (Server-Sent Events) pre webových alebo vzdialených agentov:
+#### B. Running as a Network Service (`sse` transport)
+For remote or web-based agents that connect over Server-Sent Events (SSE):
 
 ```bash
 docker run -d \
@@ -118,123 +128,123 @@ docker run -d \
   -p 8000:8000 \
   -e MCP_TRANSPORT=sse \
   -e PORT=8000 \
-  -e HOMEBOX_URL=https://hb.vasedomena.sk \
-  -e HOMEBOX_API_KEY=hb_VASHOMEBOXAPIKEY \
+  -e HOMEBOX_URL=https://homebox.yourdomain.com \
+  -e HOMEBOX_API_KEY=hb_your_homebox_api_key_here \
   ghcr.io/lmolent/homebox-mcp:latest
 ```
 
 ---
 
-## 🛠 Prehľad nástrojov (Tools Reference)
+## 🛠 Tools Reference
 
-### 📍 Lokácie a hierarchia (Locations)
-| Nástroj | Popis | Kedy použiť |
+### 📍 Locations & Hierarchy
+| Tool | Description | When to use |
 | :--- | :--- | :--- |
-| `list_locations()` | Vráti plochý zoznam všetkých lokácií s ich ID a reťazcom `full_path`. | **Zavolať ako prvé**, keď používateľ chce niekam uložiť alebo presunúť vec, aby agent zistil platné ID lokácie. |
-| `create_location(name, description, parent_id)` | Vytvorí novú fyzickú lokáciu (miestnosť, budovu, auto, regál, krabicu). | Keď používateľ povie *"Vytvor novú lokáciu Dielňa"* alebo *"Pridaj poličku do Garáže"*. |
-| `location_tree(with_items)` | Vráti stromovú štruktúru lokácií (voliteľne aj s položkami). | Pri komplexnom prieskume štruktúry skladu/domácnosti. |
-| `move_item(id, new_parent_id)` | Presunie položku alebo pod-lokáciu do iného umiestnenia. | Keď používateľ povie *"Presuň vŕtačku z Garáže do Dielne"*. |
+| `list_locations()` | Returns a flat list of all locations with their UUID and `full_path`. | **Call this first** to discover valid location IDs before placing or moving items. |
+| `create_location(name, description, parent_id)` | Creates a new physical location, room, vehicle, shelf, or building. | When user asks to *"Create a Workshop location"* or *"Add shelf B to Garage"*. |
+| `location_tree(with_items)` | Returns the full nested hierarchy tree (optionally including items). | For comprehensive exploratory overviews of storage structures. |
+| `move_item(id, new_parent_id)` | Moves an item or sub-location into a new parent container. | When user asks to *"Move the drill from Garage to Workshop"*. |
 
-### 🔍 Vyhľadávanie a navigácia (Search & Query)
-| Nástroj | Popis | Kedy použiť |
+### 🔍 Search & Navigation
+| Tool | Description | When to use |
 | :--- | :--- | :--- |
-| `search_items(query, parent_ids, tag_ids, page, page_size)` | Vyhľadáva položky podľa textu s voliteľným filtrom na lokácie a štítky. | Východiskový bod pre otázky typu *"Kde mám gola sadu?"* alebo *"Čo je v Jeepe?"*. |
-| `get_item_path(id)` | Vráti hierarchickú cestu od koreňa po entitu (breadcrumbs). | **Kritické pri otázke "Kde je X?"** — agent zistí napr. `Garáž 2 > Skrinka > Polica 3 > Skrutkovač`. |
-| `get_item(id)` | Vráti kompletné detaily entity podľa jej UUID. | Na zistenie sériového čísla, nákupnej ceny, záruky, príloh a detailného popisu. |
-| `get_item_by_asset_id(asset_id)` | Nájde položku podľa fyzického štítku Homeboxu (napr. `000-015`). | Keď používateľ odčíta štítok s číslom alebo QR kódom. |
-| `search_by_barcode(barcode)` | Vyhľadá produkt podľa EAN / čiarového kódu. | Pri skenovaní čiarových kódov produktov. |
+| `search_items(query, parent_ids, tag_ids, page, page_size)` | Searches items by text with optional parent location or tag filters. | Primary starting point for queries like *"Where is the socket set?"* or *"What is inside the Jeep?"*. |
+| `get_item_path(id)` | Returns the hierarchical breadcrumb chain from root to entity. | **Essential for "Where is X?" queries** — returns e.g. `Garage 2 > Tool Cabinet > Top Shelf > Screwdriver`. |
+| `get_item(id)` | Returns complete entity details by UUID. | To inspect serial numbers, purchase price, warranty, attachments, and notes. |
+| `get_item_by_asset_id(asset_id)` | Finds an item by short Homebox asset label (e.g. `000-015`). | When user provides a sticker code or asset tag. |
+| `search_by_barcode(barcode)` | Look up product info by barcode or EAN number. | When scanning barcodes or EAN codes. |
 
-### 📦 Správa položiek (Item Management)
-| Nástroj | Popis | Kedy použiť |
+### 📦 Item Management
+| Tool | Description | When to use |
 | :--- | :--- | :--- |
-| `create_item(...)` | Zaeviduje nový predmet s voliteľnými detailmi (sériové číslo, model, výrobca, cena, poznámky). | Pri pridávaní nového náradia, elektroniky či vybavenia. |
-| `update_item(id, fields)` | Bezpečne aktualizuje ľubovoľné polia entity cez `PUT` (s automatickým zlúčením stavu). | Pri úprave množstva, popisu, ceny, poznámok alebo sériového čísla. |
-| `delete_item(id)` | Zmaže položku alebo lokáciu podľa ID. | Pri vyradení položky. |
-| `duplicate_item(id, copy_prefix)` | Vytvorí kópiu existujúcej položky. | Pri evidencii viacerých kusov rovnakého náradia alebo techniky. |
+| `create_item(...)` | Creates a new item with metadata (serial number, model, brand, price, notes). | When registering new tools, electronics, or equipment. |
+| `update_item(id, fields)` | Safely updates entity fields via `PUT` with automatic state merge. | When changing quantity, description, notes, price, or serial number. |
+| `delete_item(id)` | Deletes an item or location by UUID. | When decommissioning or discarding an item. |
+| `duplicate_item(id, copy_prefix)` | Clones an existing item with its attributes. | When recording multiple units of identical tools or gear. |
 
-### 🔧 Údržba a servis techniky (Maintenance)
-| Nástroj | Popis | Kedy použiť |
+### 🔧 Maintenance & Service Logs
+| Tool | Description | When to use |
 | :--- | :--- | :--- |
-| `create_maintenance_entry(...)` | Zaznamená vykonaný alebo plánovaný servis (dátum, názov, popis, cena). | Pre autá, stroje a techniku (napr. výmena oleja na Jeepe, STK, servis bicykla). |
-| `get_maintenance_log(entity_id)` | Vráti celú servisnú históriu danej položky. | Pri otázke *"Kedy bol naposledy menený olej?"* alebo *"Koľko stál servis bicykla?"*. |
+| `create_maintenance_entry(...)` | Records completed or scheduled service (date, name, description, cost). | For vehicles, tools, and appliances (oil changes, inspections, bike service). |
+| `get_maintenance_log(entity_id)` | Retrieves complete service history for an entity. | When answering *"When was the oil last changed?"* or *"How much did bike maintenance cost?"*. |
 
-### 🏷 Štítky, štatistiky a prílohy (Metadata & Attachments)
-| Nástroj | Popis | Kedy použiť |
+### 🏷 Tags, Statistics & Attachments
+| Tool | Description | When to use |
 | :--- | :--- | :--- |
-| `list_tags()` | Zoznam všetkých štítkov. | Zistenie existujúcich kategórií. |
-| `create_tag(name, description, color, parent_id)` | Vytvorenie nového štítku. | Keď používateľ chce novú kategóriu (napr. *"Autovýbava"*). |
-| `delete_tag(id)` | Zmazanie štítku. | Správa kategórií. |
-| `get_statistics()` | Celkové štatistiky inventára (počty, hodnota, záruky). | Na otázky *"Koľko vecí mám celkovo?"* alebo *"Aká je hodnota vybavenia?"*. |
-| `add_external_link(entity_id, title, url)` | Pridá k položke webový odkaz (návod, eshop, PDF dokument). | Priloženie online dokumentácie k náradiu či zariadeniu. |
+| `list_tags()` | Lists all registered tags. | To check existing category tags. |
+| `create_tag(name, description, color, parent_id)` | Creates a new tag. | When user wants a new category (e.g. *"Automotive"*). |
+| `delete_tag(id)` | Deletes a tag by UUID. | Tag category management. |
+| `get_statistics()` | Returns overall inventory statistics (counts, value, warranties). | Answering questions like *"How many items do I have?"* or *"What is my total gear value?"*. |
+| `add_external_link(entity_id, title, url)` | Attaches a web link (manual, datasheet, product page, receipt URL). | Adding digital documentation to physical equipment. |
 
 ---
 
-## 🧠 Inštrukcie a Best Practices pre AI agentov
+## 🧠 Instructions & Best Practices for AI Agents
 
-Pre dosiahnutie 100% presnosti a nulových halucinácií dodržiavajte tieto pravidlá:
+Follow these guidelines for 100% accuracy and zero hallucinations:
 
-1. **Rozdiel medzi položkou (Item) a umiestnením (Location)**:
-   - Lokácie reprezentujú fyzické miesta alebo väčšie kontajnery (izba, garáž, auto, regál, kufor). Vytvárajte ich výhradne cez `create_location`.
-   - Položky reprezentujú predmety umiestnené v lokáciách. Vytvárajte ich cez `create_item` a **vždy sa snažte uviesť `parent_id`** (kam predmet patrí).
-2. **Kde je vec? (Lokalizačný reťazec)**:
-   - Keď sa používateľ opýta *"Kde je [vec]?"*, najprv zavolajte `search_items(query="...")`.
-   - Následne na nájdené ID zavolajte **`get_item_path(id)`**.
-   - Odpovedzte používateľovi celým reťazcom, napr.: *„Položka 'WD40' sa nachádza v: Garáž 2 > Skrinka na chémiu > Horná polica.“*
-3. **Zisťovanie obsahu lokácie**:
-   - Ak sa používateľ pýta napr. *"Čo mám v aute Jeep?"*, nezvolávajte celý `location_tree(with_items=True)`, ale nájdite ID lokácie Jeep cez `list_locations()` a potom zavolajte `search_items(parent_ids=[jeep_id])`.
-4. **Zistenie ID cieľovej lokácie**:
-   - Pred volaním `create_item` alebo `move_item` použite `list_locations()`. Prejdite pole `full_path` a nájdite zodpovedajúce ID.
-5. **Servisné záznamy**:
-   - Pre vozidlá a techniku (auto, karavan, kosačka, bicykel) evidujte servis cez `create_maintenance_entry`. Uvádzajte dátum v ISO formáte `YYYY-MM-DD` a náklady v poli `cost`.
+1. **Items vs. Locations**:
+   - Locations represent physical spaces or containers (room, garage, car, shelf, box). Always create them using `create_location`.
+   - Items represent physical objects stored within locations. Always create them using `create_item` and **always provide `parent_id`** (destination container).
+2. **"Where is item X?" (Breadcrumbs)**:
+   - When asked where an item is located, first call `search_items(query="...")`.
+   - Then call **`get_item_path(id)`** on the matching item.
+   - Reply with the complete hierarchical chain, e.g.: *"The 'WD40' is located in: Garage 2 > Chemical Cabinet > Top Shelf."*
+3. **Inspecting Location Contents**:
+   - When asked *"What is inside the Jeep?"*, do NOT fetch the entire `location_tree(with_items=True)`. Instead, find the location ID via `list_locations()` and call `search_items(parent_ids=[jeep_id])`.
+4. **Discovering Destination IDs**:
+   - Before calling `create_item` or `move_item`, call `list_locations()`. Inspect the `full_path` field to find the corresponding UUID.
+5. **Vehicle & Tool Service Logs**:
+   - For vehicles and machinery (car, caravan, lawnmower, bicycle), record service via `create_maintenance_entry`. Provide dates in ISO `YYYY-MM-DD` format and costs in the `cost` field.
 
 ---
 
-## 💡 Typické scenáre (Agent Workflows)
+## 💡 Common Agent Workflows
 
-### Scenár A: Zistenie presnej polohy predmetu
-> **Používateľ**: *"Kde mám gola sadu?"*
-1. Agent zavolá `search_items(query="Gola sada")`.
-2. Získa položky, napr. `Gola sada malá` (ID: `fc8031e8...`) a `Gola sada veľká` (ID: `eaba5497...`).
-3. Agent zavolá `get_item_path(id="fc8031e8...")` a `get_item_path(id="eaba5497...")`.
-4. Výsledok:
-   - `Gola sada malá`: `Jeep > Kufor`
-   - `Gola sada veľká`: `Karavan > Úložný priestor`
-5. Agent zrozumiteľne odpovie s presným umiestnením oboch sád.
+### Scenario A: Finding the Exact Location of an Item
+> **User**: *"Where is my socket set?"*
+1. Agent calls `search_items(query="Socket set")`.
+2. Receives results: `Small Socket Set` (ID: `fc8031e8...`) and `Large Socket Set` (ID: `eaba5497...`).
+3. Agent calls `get_item_path(id="fc8031e8...")` and `get_item_path(id="eaba5497...")`.
+4. Breadcrumbs:
+   - `Small Socket Set`: `Jeep > Trunk`
+   - `Large Socket Set`: `Caravan > Storage Compartment`
+5. Agent responds clearly with the exact locations of both sets.
 
-### Scenár B: Presun predmetu do nového miesta
-> **Používateľ**: *"Vytvor novú skrinku 'Náradie' v Garáži 1 a presuň tam vŕtačku."*
-1. Agent zavolá `list_locations()` a nájde ID pre `Garáž 1` (`8587d8b0...`).
-2. Agent zavolá `create_location(name="Náradie", parent_id="8587d8b0...")` -> získa ID novej skrinky.
-3. Agent nájde vŕtačku cez `search_items(query="Vŕtačka")` -> získa ID vŕtačky.
-4. Agent zavolá `move_item(id=vrtacka_id, new_parent_id=nova_skrinka_id)`.
-5. Agent potvrdí úspešné vytvorenie a presun.
+### Scenario B: Moving an Item to a New Container
+> **User**: *"Create a new cabinet 'Tools' in Garage 1 and move the drill there."*
+1. Agent calls `list_locations()` and retrieves the ID for `Garage 1` (`8587d8b0...`).
+2. Agent calls `create_location(name="Tools", parent_id="8587d8b0...")` -> receives new cabinet ID.
+3. Agent finds the drill via `search_items(query="Drill")` -> retrieves drill ID.
+4. Agent calls `move_item(id=drill_id, new_parent_id=tools_cabinet_id)`.
+5. Agent confirms the creation and relocation.
 
-### Scenár C: Záznam servisu a údržby
-> **Používateľ**: *"Dnes som na Jeepe vymenil motorový olej a filter, stálo to 85 eur."*
-1. Agent nájde entitu Jeep cez `search_items(query="Jeep")`.
-2. Agent zavolá `create_maintenance_entry`:
+### Scenario C: Logging Maintenance & Service
+> **User**: *"I changed the engine oil and filter on the Jeep today, it cost 85 EUR."*
+1. Agent finds the Jeep entity via `search_items(query="Jeep")`.
+2. Agent calls `create_maintenance_entry`:
    ```json
    {
      "entity_id": "58451a42-c1fa-4f84-b011-6a402670a2de",
-     "name": "Výmena motorového oleja a filtra",
+     "name": "Engine oil and filter change",
      "cost": "85.00",
      "completed_date": "2026-10-13",
-     "description": "Pravidelný servis motorového oleja a olejového filtra."
+     "description": "Scheduled engine oil (5W-30) and oil filter replacement."
    }
    ```
-3. Agent informuje o zaevidovaní servisného záznamu do servisnej knihy Jeepu.
+3. Agent confirms the maintenance log entry in the Jeep's service history.
 
 ---
 
-## 🧪 Testovanie
+## 🧪 Testing
 
-Repozitár obsahuje komplexný automatizovaný integračný test `test_mcp_tools.py`, ktorý otestuje všetky funkcie proti bežiacej inštancii Homeboxu a automaticky po sebe vyčistí všetky testovacie dáta:
+The repository includes an end-to-end integration test suite `test_mcp_tools.py` that validates all 21 tools against a running Homebox instance and automatically cleans up test data:
 
 ```bash
 uv run test_mcp_tools.py
 ```
 
-Výstup testu:
+Sample output:
 ```text
 === 1. Testing get_statistics() ===
 Stats: {'totalUsers': 1, 'totalItems': 21, 'totalLocations': 10, ...}
@@ -246,6 +256,6 @@ Found 10 locations.
 
 ---
 
-## 📄 Licencia
+## 📄 License
 
-Tento projekt je zverejnený pod licenciou [MIT](LICENSE).
+This project is licensed under the [MIT License](LICENSE).

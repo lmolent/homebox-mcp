@@ -19,6 +19,7 @@ if not os.getenv("HOMEBOX_API_KEY"):
 
 import homebox_mcp as m
 
+
 def run_tests():
     print("=== 1. Testing get_statistics() ===")
     stats = m.get_statistics()
@@ -46,28 +47,28 @@ def run_tests():
     assert len(items) > 0
     item_id = items[0]["id"]
     print(f"Found asset 000-015: {items[0]['name']} (ID: {item_id})")
-    
+
     path = m.get_item_path(item_id)
     print("Path breadcrumbs:", " > ".join(p["name"] for p in path))
     assert len(path) >= 1
 
     print("\n=== 5. Testing create_location() ===")
-    new_loc = m.create_location(name="Test MCP Dielna", description="Docasna testovacia lokacia")
+    new_loc = m.create_location(name="Test MCP Workshop", description="Temporary test location")
     loc_id = new_loc["id"]
     print(f"Created location: {new_loc['name']} (ID: {loc_id})")
 
     try:
         print("\n=== 6. Testing create_item() with metadata ===")
         new_item = m.create_item(
-            name="Testovaci Skrutkovac",
-            description="Aku skrutkovac 18V",
+            name="Test Cordless Screwdriver",
+            description="Cordless drill/driver 18V",
             parent_id=loc_id,
             quantity=1,
             serial_number="SN-TEST-9988",
             model_number="MOD-18V-PRO",
             manufacturer="Bosch",
-            notes="Overovaci test pre MCP",
-            purchase_price=129.99
+            notes="MCP verification test notes",
+            purchase_price=129.99,
         )
         test_item_id = new_item["id"]
         print(f"Created item: {new_item['name']} (ID: {test_item_id})")
@@ -75,28 +76,30 @@ def run_tests():
         assert new_item.get("manufacturer") == "Bosch"
 
         print("\n=== 7. Testing update_item() (safe PUT merge) ===")
-        updated = m.update_item(test_item_id, {
-            "description": "Aktualizovany popis skrutkovaca",
-            "quantity": 2,
-            "notes": "Poznamka uspesne aktualizovana"
-        })
+        updated = m.update_item(
+            test_item_id,
+            {
+                "description": "Updated screwdriver description",
+                "quantity": 2,
+                "notes": "Notes updated successfully",
+            },
+        )
         print(f"Updated description: {updated.get('description')}, quantity: {updated.get('quantity')}")
-        assert updated.get("description") == "Aktualizovany popis skrutkovaca"
+        assert updated.get("description") == "Updated screwdriver description"
         assert updated.get("quantity") == 2
         assert updated.get("serialNumber") == "SN-TEST-9988"  # Preserved!
 
         print("\n=== 8. Testing move_item() ===")
-        # Move into root (or another parent)
         moved = m.move_item(test_item_id, jeep_loc["id"] if jeep_loc else loc_id)
         print("Moved successfully:", moved.get("parent", {}).get("name") or "Parent updated")
 
         print("\n=== 9. Testing maintenance log ===")
         maint_entry = m.create_maintenance_entry(
             entity_id=test_item_id,
-            name="Vymena uhlikov",
-            description="Preventivny servis motora",
+            name="Motor brush replacement",
+            description="Preventive motor maintenance",
             cost="25.00",
-            completed_date="2026-10-13"
+            completed_date="2026-10-13",
         )
         print("Created maintenance entry:", maint_entry.get("name"), "Cost:", maint_entry.get("cost"))
         log = m.get_maintenance_log(test_item_id)
@@ -106,23 +109,22 @@ def run_tests():
         print("\n=== 10. Testing add_external_link() ===")
         link_res = m.add_external_link(
             entity_id=test_item_id,
-            title="Manual skrutkovaca",
-            url="https://example.com/bosch-manual.pdf"
+            title="Screwdriver user manual",
+            url="https://example.com/bosch-manual.pdf",
         )
         attachments = link_res.get("attachments", [])
         print("Attachments count:", len(attachments))
-        assert any(a.get("title") == "Manual skrutkovaca" for a in attachments)
+        assert any(a.get("title") == "Screwdriver user manual" for a in attachments)
 
         print("\n=== 11. Testing duplicate_item() ===")
-        dup = m.duplicate_item(test_item_id, copy_prefix="Kopia - ")
+        dup = m.duplicate_item(test_item_id, copy_prefix="Copy of ")
         dup_id = dup["id"]
         print(f"Created duplicate: {dup['name']} (ID: {dup_id})")
-        # Clean up duplicate immediately
         m.delete_item(dup_id)
         print("Duplicate deleted.")
 
         print("\n=== 12. Testing create_tag() and delete_tag() ===")
-        tag = m.create_tag(name="TestTagAuto", description="Testovaci tag", color="#10b981")
+        tag = m.create_tag(name="TestTagAutomotive", description="Test tag", color="#10b981")
         tag_id = tag["id"]
         print(f"Created tag: {tag['name']} (ID: {tag_id})")
         m.delete_tag(tag_id)
@@ -142,6 +144,7 @@ def run_tests():
             print("Error deleting test location:", e)
 
     print("\n>>> ALL TESTS PASSED SUCCESSFULLY! <<<")
+
 
 if __name__ == "__main__":
     run_tests()

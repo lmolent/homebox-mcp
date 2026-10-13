@@ -277,7 +277,7 @@ def create_location(name: str, description: str = "", parent_id: str | None = No
     """Create a new physical location, room, building, vehicle, or sub-container.
 
     Args:
-        name: Name of the location (e.g. 'Garáž 1', 'Dielňa', 'Polička A', 'Karavan').
+        name: Name of the location (e.g. 'Garage 1', 'Workshop', 'Shelf A', 'Van').
         description: Description of the location.
         parent_id: Optional parent location UUID. If omitted, creates a root-level location.
                    If provided, creates a nested sub-location inside that parent.
@@ -400,7 +400,7 @@ def create_tag(
     """Create a new tag.
 
     Args:
-        name: Tag name (e.g. 'Náradie', 'Záhrada', 'Dôležité').
+        name: Tag name (e.g. 'Tools', 'Garden', 'Important').
         description: Optional description.
         color: Optional hex color code (e.g. '#2563eb').
         parent_id: Optional parent tag UUID for tag hierarchies.
