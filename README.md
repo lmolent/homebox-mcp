@@ -2,8 +2,9 @@
 
 [![FastMCP](https://img.shields.io/badge/FastMCP-Python-blue)](https://github.com/jlowin/fastmcp)
 [![Homebox](https://img.shields.io/badge/Homebox-Inventory-green)](https://homebox.software/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Build and Publish Docker Image](https://github.com/lmolent/homebox-mcp/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/lmolent/homebox-mcp/actions/workflows/docker-publish.yml)
 [![Docker](https://img.shields.io/badge/Docker-GHCR-2496ED?logo=docker&logoColor=white)](https://github.com/lmolent/homebox-mcp/pkgs/container/homebox-mcp)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Production-grade **Model Context Protocol (MCP)** server for the self-hosted [Homebox](https://homebox.software/) inventory management system. Enables autonomous **AI agents** (Google Antigravity, Claude Desktop, Cursor, Claude Code, Cline, and others) to seamlessly interact with physical inventories — finding items, navigating location hierarchies, creating and moving items, logging vehicle/tool maintenance, and managing tags.
 
@@ -96,7 +97,15 @@ HOMEBOX_API_KEY=hb_your_homebox_api_key_here
 
 ### 4. Docker Deployment (GHCR Image)
 
-Pre-built multi-architecture Docker images (`linux/amd64` and `linux/arm64`) are automatically published to the **GitHub Container Registry (GHCR)**.
+Pre-built multi-architecture Docker images (`linux/amd64` and `linux/arm64`) are automatically built via GitHub Actions and published to the **GitHub Container Registry (GHCR)**:
+
+* 📦 **Container Image URL**: `ghcr.io/lmolent/homebox-mcp:latest`
+* 🔗 **GitHub Package Page**: [github.com/lmolent/homebox-mcp/pkgs/container/homebox-mcp](https://github.com/lmolent/homebox-mcp/pkgs/container/homebox-mcp)
+* 🏗️ **Supported Architectures**: `linux/amd64`, `linux/arm64`
+
+```bash
+docker pull ghcr.io/lmolent/homebox-mcp:latest
+```
 
 #### A. Running via Docker in MCP Clients (`stdio` mode)
 No local Python or dependencies required. The MCP client runs the container directly:
