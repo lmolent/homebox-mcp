@@ -11,7 +11,7 @@ WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1
 
 # Install runtime dependencies
-RUN uv pip install --system fastmcp httpx
+RUN uv pip install --system fastmcp httpx python-dotenv
 
 # Stage 2: Minimal, secure runtime
 FROM python:3.12-slim-bookworm
@@ -29,6 +29,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY homebox_mcp.py /app/homebox_mcp.py
 
 ENV PYTHONUNBUFFERED=1
+ENV MCP_HOST=0.0.0.0
 
 USER appuser
 

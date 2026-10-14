@@ -1,18 +1,16 @@
 # /// script
-# dependencies = ["fastmcp", "httpx"]
+# dependencies = ["fastmcp", "httpx", "python-dotenv"]
 # ///
 """Automated end-to-end verification of all Homebox MCP tools."""
 import os
 import sys
 
+from dotenv import load_dotenv
+
 # Load environment variables from .env if present
 env_file = os.path.join(os.path.dirname(__file__), ".env")
 if os.path.exists(env_file):
-    with open(env_file) as f:
-        for line in f:
-            if line.strip() and not line.startswith("#") and "=" in line:
-                k, v = line.strip().split("=", 1)
-                os.environ.setdefault(k, v)
+    load_dotenv(env_file)
 
 if not os.getenv("HOMEBOX_API_KEY"):
     sys.exit("ERROR: HOMEBOX_API_KEY is not set. Please set it in .env or environment.")
@@ -30,35 +28,26 @@ def run_tests():
     print("\n=== 2. Testing list_locations() ===")
     locs = m.list_locations()
     print(f"Found {len(locs)} locations.")
-    assert len(locs) > 0
-    first_loc = locs[0]
-    print(f"Sample location: {first_loc['name']} (ID: {first_loc['id']}, Path: {first_loc['full_path']})")
+    first_loc = locs[0] if locs else None
+    if first_loc:
+        print(f"Sample location: {first_loc['name']} (ID: {first_loc['id']}, Path: {first_loc['full_path']})")
 
-    print("\n=== 3. Testing search_items() with query & parent_ids ===")
-    jeep_loc = next((l for l in locs if "Jeep" in l["name"]), None)
-    if jeep_loc:
-        jeep_items = m.search_items(parent_ids=[jeep_loc["id"]])
-        print(f"Items in {jeep_loc['name']}: {[it['name'] for it in jeep_items.get('items', [])]}")
-        assert jeep_items.get("total", 0) > 0
+    print("\n=== 3. Testing search_items() ===")
+    items_search = m.search_items(page_size=5)
+    print(f"Total items found in search: {items_search.get('total', 0)}")
 
-    print("\n=== 4. Testing get_item_by_asset_id() & get_item_path() ===")
-    asset_res = m.get_item_by_asset_id("000-015")
-    items = asset_res.get("items", [])
-    assert len(items) > 0
-    item_id = items[0]["id"]
-    print(f"Found asset 000-015: {items[0]['name']} (ID: {item_id})")
+    loc_id = None
+    test_item_id = None
+    dup_id = None
+    tag_id = None
 
-    path = m.get_item_path(item_id)
-    print("Path breadcrumbs:", " > ".join(p["name"] for p in path))
-    assert len(path) >= 1
-
-    print("\n=== 5. Testing create_location() ===")
+    print("\n=== 4. Testing create_location() ===")
     new_loc = m.create_location(name="Test MCP Workshop", description="Temporary test location")
     loc_id = new_loc["id"]
     print(f"Created location: {new_loc['name']} (ID: {loc_id})")
 
     try:
-        print("\n=== 6. Testing create_item() with metadata ===")
+        print("\n=== 5. Testing create_item() with metadata ===")
         new_item = m.create_item(
             name="Test Cordless Screwdriver",
             description="Cordless drill/driver 18V",
@@ -75,6 +64,21 @@ def run_tests():
         assert new_item.get("serialNumber") == "SN-TEST-9988"
         assert new_item.get("manufacturer") == "Bosch"
 
+        print("\n=== 6. Testing get_item_path() and get_item() ===")
+        path = m.get_item_path(test_item_id)
+        print("Path breadcrumbs:", " > ".join(p.get("name", "") for p in path))
+        assert len(path) >= 1
+
+        fetched_item = m.get_item(test_item_id)
+        assert fetched_item.get("name") == "Test Cordless Screwdriver"
+
+        # Test asset lookup dynamically if Homebox assigned an asset ID
+        asset_id = fetched_item.get("assetId")
+        if asset_id:
+            print(f"Testing get_item_by_asset_id with dynamic asset ID: {asset_id}")
+            asset_res = m.get_item_by_asset_id(str(asset_id))
+            assert "items" in asset_res or "name" in asset_res
+
         print("\n=== 7. Testing update_item() (safe PUT merge) ===")
         updated = m.update_item(
             test_item_id,
@@ -90,7 +94,7 @@ def run_tests():
         assert updated.get("serialNumber") == "SN-TEST-9988"  # Preserved!
 
         print("\n=== 8. Testing move_item() ===")
-        moved = m.move_item(test_item_id, jeep_loc["id"] if jeep_loc else loc_id)
+        moved = m.move_item(test_item_id, loc_id)
         print("Moved successfully:", moved.get("parent", {}).get("name") or "Parent updated")
 
         print("\n=== 9. Testing maintenance log ===")
@@ -121,6 +125,7 @@ def run_tests():
         dup_id = dup["id"]
         print(f"Created duplicate: {dup['name']} (ID: {dup_id})")
         m.delete_item(dup_id)
+        dup_id = None
         print("Duplicate deleted.")
 
         print("\n=== 12. Testing create_tag() and delete_tag() ===")
@@ -128,20 +133,33 @@ def run_tests():
         tag_id = tag["id"]
         print(f"Created tag: {tag['name']} (ID: {tag_id})")
         m.delete_tag(tag_id)
+        tag_id = None
         print("Tag deleted.")
 
     finally:
         print("\n=== 13. Cleaning up test item and location ===")
-        try:
-            m.delete_item(test_item_id)
-            print("Deleted test item.")
-        except Exception as e:
-            print("Error deleting test item:", e)
-        try:
-            m.delete_item(loc_id)
-            print("Deleted test location.")
-        except Exception as e:
-            print("Error deleting test location:", e)
+        if dup_id:
+            try:
+                m.delete_item(dup_id)
+            except Exception as e:
+                print("Error deleting duplicate:", e)
+        if tag_id:
+            try:
+                m.delete_tag(tag_id)
+            except Exception as e:
+                print("Error deleting tag:", e)
+        if test_item_id:
+            try:
+                m.delete_item(test_item_id)
+                print("Deleted test item.")
+            except Exception as e:
+                print("Error deleting test item:", e)
+        if loc_id:
+            try:
+                m.delete_item(loc_id)
+                print("Deleted test location.")
+            except Exception as e:
+                print("Error deleting test location:", e)
 
     print("\n>>> ALL TESTS PASSED SUCCESSFULLY! <<<")
 

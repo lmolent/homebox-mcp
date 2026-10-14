@@ -1,0 +1,20 @@
+[project]
+name = "homebox-mcp"
+version = "0.1.0"
+description = "Production-grade MCP server for Homebox inventory management"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastmcp",
+    "httpx",
+    "python-dotenv",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

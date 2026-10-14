@@ -1,30 +1,37 @@
 # /// script
-# dependencies = ["fastmcp", "httpx"]
+# dependencies = ["fastmcp", "httpx", "python-dotenv"]
 # ///
 """Production-grade MCP server for Homebox inventory management.
 Run: uv run homebox_mcp.py
 """
+import logging
 import os
+import re
 import sys
+import uuid
 from typing import Any
 
 import httpx
+from dotenv import load_dotenv
 from fastmcp import FastMCP
 
-# Optional: Load .env file from script directory if present
+# Structured logging configured strictly to stderr so stdio JSON-RPC remains clean
+logger = logging.getLogger("homebox_mcp")
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter("[%(levelname)s] %(name)s: %(message)s"))
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+
+# Load .env file from script directory if present
 env_path = os.path.join(os.path.dirname(__file__), ".env")
 if os.path.exists(env_path):
-    with open(env_path) as f:
-        for line in f:
-            if line.strip() and not line.startswith("#") and "=" in line:
-                k, v = line.strip().split("=", 1)
-                os.environ.setdefault(k, v)
+    load_dotenv(env_path)
 
 BASE_URL = os.getenv("HOMEBOX_URL", "http://localhost:7745").rstrip("/") + "/api/v1"
 API_KEY = os.getenv("HOMEBOX_API_KEY")
 if not API_KEY:
-    # Helpful reminder in stderr for CLI execution
-    sys.stderr.write("WARNING: HOMEBOX_API_KEY environment variable is not set.\n")
+    logger.warning("HOMEBOX_API_KEY environment variable is not set.")
 
 mcp = FastMCP("homebox")
 http = httpx.Client(
@@ -37,6 +44,17 @@ http = httpx.Client(
 _TYPE_CACHE: dict[str, str] = {}
 
 
+def _validate_uuid(val: str, field_name: str = "id") -> str:
+    """Validate that val is a valid UUID string, raising ValueError if not."""
+    if not val:
+        raise ValueError(f"Parameter '{field_name}' cannot be empty.")
+    try:
+        uuid.UUID(str(val))
+    except (ValueError, AttributeError):
+        raise ValueError(f"Parameter '{field_name}' must be a valid UUID string, got: {val!r}")
+    return str(val)
+
+
 def call(method: str, path: str, **kw) -> Any:
     """Execute an HTTP request against Homebox API with sanitized error handling."""
     try:
@@ -46,11 +64,11 @@ def call(method: str, path: str, **kw) -> Any:
     except httpx.HTTPStatusError as e:
         status = e.response.status_code
         if status == 404:
-            raise RuntimeError(f"Entity or resource not found at '{path}' (404).")
+            raise RuntimeError(f"Entity or resource not found at '{path}' (404).") from e
         msg = e.response.text if len(e.response.text) < 200 else f"HTTP {status}"
-        raise RuntimeError(f"Homebox API error ({status}): {msg}")
-    except httpx.RequestError:
-        raise RuntimeError("Failed to communicate with Homebox API server.")
+        raise RuntimeError(f"Homebox API error ({status}): {msg}") from e
+    except httpx.RequestError as e:
+        raise RuntimeError("Failed to communicate with Homebox API server.") from e
 
 
 def _get_entity_type_id(is_location: bool) -> str | None:
@@ -109,6 +127,7 @@ def get_item(id: str) -> dict:
     Returns complete entity data including attachments, warranty, purchase details,
     serial number, custom fields, and parent information.
     """
+    _validate_uuid(id, "id")
     return call("GET", f"/entities/{id}")
 
 
@@ -128,13 +147,20 @@ def get_item_path(id: str) -> list[dict]:
     Essential for answering 'Where is item X located?' - returns the chain of containers/rooms
     (e.g., Garage > Shelf 2 > Toolbox > Screwdriver).
     """
+    _validate_uuid(id, "id")
     return call("GET", f"/entities/{id}/path")
 
 
 @mcp.tool
 def search_by_barcode(barcode: str) -> list[dict]:
     """Search product info by barcode or EAN number using Homebox product lookup."""
-    return call("GET", "/products/search-from-barcode", params={"data": barcode})
+    # Homebox backend v1_ctrl_product_search expects 'productEAN' (schema:"productEAN")
+    # while some client documentation specifies 'data'. Passing both ensures compatibility.
+    return call(
+        "GET",
+        "/products/search-from-barcode",
+        params={"productEAN": barcode, "data": barcode},
+    )
 
 
 # ==============================================================================
@@ -171,8 +197,16 @@ def create_item(
         notes: Additional private notes or instructions.
         purchase_price: Purchase price as a float.
     """
+    if parent_id:
+        _validate_uuid(parent_id, "parent_id")
+    if entity_type_id:
+        _validate_uuid(entity_type_id, "entity_type_id")
+    if tag_ids:
+        for tid in tag_ids:
+            _validate_uuid(tid, "tag_ids")
+
     target_type = entity_type_id or _get_entity_type_id(is_location=False)
-    body = {
+    body: dict[str, Any] = {
         "name": name,
         "description": description,
         "quantity": quantity,
@@ -180,16 +214,19 @@ def create_item(
         "tagIds": tag_ids or [],
         "entityTypeId": target_type,
     }
+    # Homebox repo.EntityCreate supports modelNumber and manufacturer on POST
+    if model_number:
+        body["modelNumber"] = model_number
+    if manufacturer:
+        body["manufacturer"] = manufacturer
+
     res = call("POST", "/entities", json={k: v for k, v in body.items() if v is not None})
 
-    # Apply extended metadata via full update if provided
+    # Homebox POST /entities does not accept serialNumber, notes, or purchasePrice
+    # in repo.EntityCreate. These fields must be updated via PUT /entities/{id}.
     extended_fields: dict[str, Any] = {}
     if serial_number:
         extended_fields["serialNumber"] = serial_number
-    if model_number:
-        extended_fields["modelNumber"] = model_number
-    if manufacturer:
-        extended_fields["manufacturer"] = manufacturer
     if notes:
         extended_fields["notes"] = notes
     if purchase_price is not None:
@@ -211,6 +248,7 @@ def update_item(id: str, fields: dict) -> dict:
     purchase_price/purchasePrice, purchase_date/purchaseDate, warranty_expires/warrantyExpires,
     insured, archived.
     """
+    _validate_uuid(id, "id")
     curr = call("GET", f"/entities/{id}")
 
     aliases = {
@@ -258,12 +296,14 @@ def update_item(id: str, fields: dict) -> dict:
 @mcp.tool
 def delete_item(id: str) -> dict:
     """Delete an item or location by UUID."""
+    _validate_uuid(id, "id")
     return call("DELETE", f"/entities/{id}")
 
 
 @mcp.tool
 def duplicate_item(id: str, copy_prefix: str = "Copy of ") -> dict:
     """Duplicate an existing item or location with all its attributes."""
+    _validate_uuid(id, "id")
     return call("POST", f"/entities/{id}/duplicate", json={"copyPrefix": copy_prefix})
 
 
@@ -282,6 +322,8 @@ def create_location(name: str, description: str = "", parent_id: str | None = No
         parent_id: Optional parent location UUID. If omitted, creates a root-level location.
                    If provided, creates a nested sub-location inside that parent.
     """
+    if parent_id:
+        _validate_uuid(parent_id, "parent_id")
     loc_type_id = _get_entity_type_id(is_location=True)
     body = {
         "name": name,
@@ -300,6 +342,11 @@ def list_locations() -> list[dict]:
     Call this first to discover valid destination IDs when user wants to place or move items.
     """
     tree = call("GET", "/entities/tree", params={"withItems": False})
+    if not tree:
+        return []
+    if isinstance(tree, dict):
+        tree = [tree]
+
     locations: list[dict] = []
 
     def walk(nodes: list[dict], parent_path: str = ""):
@@ -333,6 +380,8 @@ def move_item(id: str, new_parent_id: str) -> dict:
         id: UUID of the item or container to move.
         new_parent_id: UUID of the destination location (use list_locations to find IDs).
     """
+    _validate_uuid(id, "id")
+    _validate_uuid(new_parent_id, "new_parent_id")
     return update_item(id=id, fields={"parentId": new_parent_id})
 
 
@@ -344,6 +393,7 @@ def move_item(id: str, new_parent_id: str) -> dict:
 @mcp.tool
 def get_maintenance_log(entity_id: str) -> list[dict]:
     """Get the maintenance and service history log for an item (vehicle, machine, tool, etc.)."""
+    _validate_uuid(entity_id, "entity_id")
     return call("GET", f"/entities/{entity_id}/maintenance")
 
 
@@ -369,6 +419,7 @@ def create_maintenance_entry(
         completed_date: Date completed in YYYY-MM-DD format (if completed).
         scheduled_date: Date scheduled in YYYY-MM-DD format (if planned).
     """
+    _validate_uuid(entity_id, "entity_id")
     payload = {
         "name": name,
         "description": description,
@@ -405,18 +456,22 @@ def create_tag(
         color: Optional hex color code (e.g. '#2563eb').
         parent_id: Optional parent tag UUID for tag hierarchies.
     """
-    body = {
+    if parent_id:
+        _validate_uuid(parent_id, "parent_id")
+    body: dict[str, Any] = {
         "name": name,
         "description": description,
         "color": color,
-        "parentId": parent_id or "00000000-0000-0000-0000-000000000000",
     }
+    if parent_id:
+        body["parentId"] = parent_id
     return call("POST", "/tags", json=body)
 
 
 @mcp.tool
 def delete_tag(id: str) -> dict:
     """Delete a tag by UUID."""
+    _validate_uuid(id, "id")
     return call("DELETE", f"/tags/{id}")
 
 
@@ -440,12 +495,18 @@ def add_external_link(entity_id: str, title: str, url: str) -> dict:
         title: Title of the link (e.g. 'User Manual PDF', 'Official Store Page').
         url: Full web URL (must start with http:// or https://).
     """
+    _validate_uuid(entity_id, "entity_id")
+    if not re.match(r"^https?://", url.strip(), re.IGNORECASE):
+        raise ValueError(f"Invalid URL: {url!r}. URL must start with http:// or https://")
+
+    # In Homebox API (v1_ctrl_entities_attachments_external.go), external link bookmarks
+    # use source_type='link' and store the URL string in 'external_id'.
     return call(
         "POST",
         f"/entities/{entity_id}/attachments/external",
         json={
             "title": title,
-            "external_id": url,
+            "external_id": url.strip(),
             "attachment_type": "document",
             "source_type": "link",
         },
@@ -462,7 +523,7 @@ if __name__ == "__main__":
     transport = os.getenv("MCP_TRANSPORT", "stdio").lower()
     if transport == "sse":
         port = int(os.getenv("PORT", os.getenv("MCP_PORT", "8000")))
-        host = os.getenv("HOST", os.getenv("MCP_HOST", "0.0.0.0"))
+        host = os.getenv("HOST", os.getenv("MCP_HOST", "127.0.0.1"))
         mcp.run(transport="sse", host=host, port=port)
     else:
         mcp.run(transport="stdio")
